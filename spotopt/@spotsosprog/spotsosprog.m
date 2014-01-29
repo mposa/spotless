@@ -29,7 +29,7 @@ classdef spotsosprog < spotprog
             
             mtch = match(x,pr.variables);
             
-            flag = ~(any(any(pow(:,mtch(mtch~=0)) > 1)) | ...
+            flag = ~(any(sum(pow(:,mtch(mtch~=0)),2) > 1) | ...
                      any(imag(Coeff(:)) ~= 0));
             
             if ~flag,
@@ -172,78 +172,8 @@ classdef spotsosprog < spotprog
             coeff = [coeff;-coeff(ii(ind))];
             x = msspoly([1 1],sub,vars,pow,coeff);
           end
-          
-%           display('Starting expr reduction')
-%           [vars,exp,coeff]=decomp(x);
-%           
-%           [~,xid] = isfree(vars);
-%           [~,cid] = isfree(c);
-%           [~,sid] = isfree(s);
-%           
-%           smtch = mss_match(xid,sid);
-%           vars     = [ vars ; s(smtch == 0) ];
-%           
-%           [~,xid] = isfree(vars);
-%           
-%           exp   = [exp zeros(size(exp,1), sum(smtch == 0))];
-%           smtch = mss_match(xid,sid);
-%           
-%           mtch = mss_match(xid,cid);
-%           
-%           %           guess = 0;
-%           
-%           for i = 1:length(mtch)
-%             if mtch(i) ~= 0
-%               ind = find(exp(:,mtch(i)) >= 2);
-%               while ~isempty(ind)
-%                 exp(ind,mtch(i)) = exp(ind,mtch(i)) - 2;
-%                 c0 = exp(ind,:);
-%                 exp(ind,smtch(i)) = exp(ind,smtch(i)) + 2;
-%                 exp = [exp;c0];
-%                 coeff = [coeff coeff(ind)];
-%                 coeff(ind) = -coeff(ind);
-% 
-% %                 e = exp(ind,:);
-% %                 e(mtch(i)) = e(mtch(i)) - 2;
-% %                 val = coeff(ind);
-% %                 for j=1:length(e),
-% %                   val = val*vars(j)^e(j);
-% %                 end
-% %                 x = x + (1 - vars(smtch(i))^2 - vars(mtch(i))^2)*val;
-% %                 [vars,exp,coeff]=decomp(x);
-% %                 
-% %                 [~,xid] = isfree(vars);
-% %                 [~,cid] = isfree(c);
-% %                 [~,sid] = isfree(s);
-% %                 
-% %                 smtch = mss_match(xid,sid);
-% %                 vars     = [ vars ; s(smtch == 0) ];
-% %                 
-% %                 [~,xid] = isfree(vars);
-% %                 
-% %                 exp   = [exp zeros(size(exp,1), sum(smtch == 0))];
-% %                 smtch = mss_match(xid,sid);
-% %                 
-% %                 mtch = mss_match(xid,cid);
-% %                 
-%                 ind = find(exp(:,mtch(i)) >= 2);
-%               end
-%             end
-%           end
-%           display('making unique')
-%           [expu,ia,ic] = unique(exp,'rows');
-%           coeff_trans = sparse(1:length(ic),ic,ones(length(ic),1),length(ic),length(ia));
-%           x=recomp(vars,exp,coeff);
-%           display('reconstructing')
-% %           x = recomp(vars,expu,coeff*coeff_trans);
-%           display('done')
         end
-        
-        function [vars,exp] = trigPowerReduce(pr,vars,exp,c,s)
-
-        end
-        
-        
+                
         function [pr,Q,phi,y,basis] = buildDSOSDecompPrimal(pr,expr,options)
             if ~spot_hasSize(expr,[1 1])
                 error('buildSOSDecomp expects a scalar polynomial.');
