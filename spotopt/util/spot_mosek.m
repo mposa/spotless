@@ -1,4 +1,4 @@
-function [x,y,z,info] = spot_sedumi(A,b,c,K,options)
+function [x,y,z,info] = spot_mosek(A,b,c,K,options)
     if nargin < 5, options = spot_sdp_default_options(); end
     
     y = [];
@@ -95,7 +95,7 @@ function [x,y,z,info] = spot_sedumi(A,b,c,K,options)
     else
         cmd = 'minimize echo(0)';
     end
-
+    
     start = spot_now();
     [r,res] = mosekopt(cmd,prob);
     [info.ctime,info.wtime] = spot_etime(spot_now(),start);
