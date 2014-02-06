@@ -162,14 +162,20 @@ classdef spotsosprog < spotprog
             sub = x.sub;
             coeff = x.coeff;
             cind_array = ii+(jj-1)*size(pow,1);
-            ind = find(pow(ii+(jj-1)*size(pow,1)) >= 2);
+            ind = find(pow(cind_array) >= 2);
             N = length(ind);
-            
-            pow(cind_array(ind)) = pow(cind_array(ind)) - 2;
-            pow = [pow zeros(size(pow,1),1); pow(ii(ind),:) 2*ones(N,1)];
-            vars = [vars zeros(size(vars,1),1); vars(ii(ind),:) sid*ones(N,1)];
-            sub = [sub;ones(N,2)];
-            coeff = [coeff;-coeff(ii(ind))];
+            while N > 0,
+              pow(cind_array(ind)) = pow(cind_array(ind)) - 2;
+              pow = [pow zeros(size(pow,1),1); pow(ii(ind),:) 2*ones(N,1)];
+              vars = [vars zeros(size(vars,1),1); vars(ii(ind),:) sid*ones(N,1)];
+              sub = [sub;ones(N,2)];
+              coeff = [coeff;-coeff(ii(ind))];
+              
+              [ii,jj] = find(vars == cid);
+              cind_array = ii+(jj-1)*size(pow,1);
+              ind = find(pow(cind_array) >= 2);
+              N = length(ind);
+            end
             x = msspoly([1 1],sub,vars,pow,coeff);
           end
         end
@@ -531,7 +537,7 @@ classdef spotsosprog < spotprog
                     pr.gramMatrices{ioff} = eqMultFac*Q{ioff};
                     pr.gramMonomials{ioff} = phi{ioff};
                 end
-		for i = 1:pr.numDiagSOS
+                for i = 1:pr.numDiagSOS
                     ioff = i + diagsosOff;
                     [pr,Q{ioff},phi{ioff},y{ioff},basis{ioff},eqMultFac] = pr.buildSOSDecompPrimal(pr.diagsosExpr(i),@newDiag,options);
                     pr.gramMatrices{ioff} = eqMultFac*Q{ioff};
