@@ -67,6 +67,33 @@ classdef spotsosprog < spotprog
 
     
     methods (Access = public)
+      function [pr,expr,newDecVars] = newSOSPoly2(pr, monomials, newGram,options)
+        decvar = pr.variables;
+        phi = spotsosprog.buildGramBasis(sum(monomials),decvar,options);
+        
+        if isfield(options,'trig') && options.trig.enable
+          phi = pr.trigMonomReduction(phi,options.trig.sin,options.trig.cos);
+        end
+        
+        [pr,Q] = newGram(pr,length(phi));
+        
+        newDecVars = Q(:);
+        expr = phi'*Q*phi;
+        
+        if isfield(options,'trig') && options.trig.enable
+          expr = pr.trigExprReduction(expr,options.trig.sin,options.trig.cos);
+        end
+      end
+      
+      function phi = buildSOSGramBasis(pr,monomials,options)
+        decvar = pr.variables;
+        phi = spotsosprog.buildGramBasis(sum(monomials),decvar,options); 
+        
+        if isfield(options,'trig') && options.trig.enable
+          phi = pr.trigMonomReduction(phi,options.trig.sin,options.trig.cos);
+        end
+      end
+      
         function [pr,Q,phi,y,basis,eqMultFac] = buildSOSDecompPrimal(pr,expr,newGram,options)
             if ~spot_hasSize(expr,[1 1])
                 error('buildSOSDecomp expects a scalar polynomial.');
@@ -100,10 +127,14 @@ classdef spotsosprog < spotprog
             
             [pr,Q] = newGram(pr,length(phi));
             sosCnst = expr-phi'*Q*phi;
+            if isfield(options,'regularize') && options.regularize
+              sosCnst = sosCnst + 1e-6*phi'*phi;
+            end
             
             if isfield(options,'trig') && options.trig.enable
               sosCnst = pr.trigExprReduction(sosCnst,options.trig.sin,options.trig.cos);
             end
+            
             decvar = pr.variables;
             
             A = diff(sosCnst,decvar);
@@ -151,32 +182,36 @@ classdef spotsosprog < spotprog
         end
         
         function x = trigExprReduction(pr,x,s,c)
-          for i=1:length(s),
-            
-            [~,cid] = isfree(c(i));
-            [~,sid] = isfree(s(i));
-            [ii,jj] = find(x.var == cid);
-            %           cind = find(x.var == cid);
-            pow = x.pow;
-            vars = x.var;
-            sub = x.sub;
-            coeff = x.coeff;
-            cind_array = ii+(jj-1)*size(pow,1);
-            ind = find(pow(cind_array) >= 2);
-            N = length(ind);
-            while N > 0,
-              pow(cind_array(ind)) = pow(cind_array(ind)) - 2;
-              pow = [pow zeros(size(pow,1),1); pow(ii(ind),:) 2*ones(N,1)];
-              vars = [vars zeros(size(vars,1),1); vars(ii(ind),:) sid*ones(N,1)];
-              sub = [sub;ones(N,2)];
-              coeff = [coeff;-coeff(ii(ind))];
-              
-              [ii,jj] = find(vars == cid);
-              cind_array = ii+(jj-1)*size(pow,1);
-              ind = find(pow(cind_array) >= 2);
-              N = length(ind);
+          for row=1:size(x,1),
+            for col=1:size(x,2),
+              for i=1:length(s),
+                xij = x(row,col);  
+                [~,cid] = isfree(c(i));
+                [~,sid] = isfree(s(i));
+                [ii,jj] = find(xij.var == cid);
+                %           cind = find(x.var == cid);
+                pow = xij.pow;
+                vars = xij.var;
+                sub = xij.sub;
+                coeff = xij.coeff;
+                cind_array = ii+(jj-1)*size(pow,1);
+                ind = find(pow(cind_array) >= 2);
+                N = length(ind);
+                while N > 0,
+                  pow(cind_array(ind)) = pow(cind_array(ind)) - 2;
+                  pow = [pow zeros(size(pow,1),1); pow(ii(ind),:) 2*ones(N,1)];
+                  vars = [vars zeros(size(vars,1),1); vars(ii(ind),:) sid*ones(N,1)];
+                  sub = [sub;ones(N,2)];
+                  coeff = [coeff;-coeff(ii(ind))];
+                  
+                  [ii,jj] = find(vars == cid);
+                  cind_array = ii+(jj-1)*size(pow,1);
+                  ind = find(pow(cind_array) >= 2);
+                  N = length(ind);
+                end
+                x(row,col) = msspoly([1 1],sub,vars,pow,coeff);
+              end
             end
-            x = msspoly([1 1],sub,vars,pow,coeff);
           end
         end
                 

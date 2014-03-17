@@ -95,9 +95,18 @@ function [x,y,z,info] = spot_mosek(A,b,c,K,options)
     else
         cmd = 'minimize echo(0)';
     end
+%     param.MSK_DPAR_INTPNT_TOL_STEP_SIZE = 0;
+%     param.MSK_IPAR_INTPNT_MAX_NUM_COR = 1e8;
+%     param.MSK_IPAR_INTPNT_MAX_NUM_REFINEMENT_STEPS = 1e8;
+%     param.MSK_IPAR_INTPNT_SCALING = 'MSK_SCALING_AGGRESSIVE';
+%     param.MSK_IPAR_INTPNT_REGULARIZATION_USE = 'MSK_OFF';
+    param.MSK_DPAR_INTPNT_TOL_PATH = .9999;
+%     param.MSK_IPAR_INTPNT_OFF_COL_TRH = 1;
+%     param.MSK_IPAR_INTPNT_ORDER_METHOD = 'MSK_ORDER_METHOD_FORCE_GRAPHPAR';
+%     MSK_ORDER_METHOD_FORCE_GRAPHPAR, MSK_ORDER_METHOD_NONE
     
     start = spot_now();
-    [r,res] = mosekopt(cmd,prob);
+    [r,res] = mosekopt(cmd,prob,param);
     [info.ctime,info.wtime] = spot_etime(spot_now(),start);
 
     switch res.sol.itr.prosta

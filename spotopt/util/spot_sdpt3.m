@@ -1,4 +1,4 @@
-function [x,y,z,info] = spot_sedumi(A,b,c,K,options)
+function [x,y,z,info] = spot_sdpt3(A,b,c,K,options)
     if nargin < 5, options = spot_sdp_default_options(); end
     
     sdpt3_options = struct('printlevel', 3*options.verbose);

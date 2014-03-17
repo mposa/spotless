@@ -153,6 +153,67 @@ classdef (InferiorClasses = {?double}) msspoly
             end
           end
         end
+        
+        function x = trigMonomReduction(x,s,c)
+          [vars,exp,coeff]=decomp(x);
+          
+          [~,xid] = isfree(vars);
+          [~,cid] = isfree(c);
+          [~,sid] = isfree(s);
+          
+          smtch = mss_match(xid,sid);
+          vars     = [ vars ; s(smtch == 0) ];
+          
+          [~,xid] = isfree(vars);
+          
+          exp   = [exp zeros(size(exp,1), sum(smtch == 0))];
+          smtch = mss_match(xid,sid);
+          
+          mtch = mss_match(xid,cid);
+          
+          %           guess = 0;
+          
+          for i = 1:length(mtch)
+            if mtch(i) ~= 0
+              ind = find(exp(:,mtch(i)) >= 2,1);
+              while ~isempty(ind)
+                exp(ind,mtch(i)) = exp(ind,mtch(i)) - 2;
+                c0 = exp(ind,:);
+                exp(ind,smtch(i)) = exp(ind,smtch(i)) + 2;
+                exp = unique([exp; c0],'rows');
+                
+                ind = find(exp(:,mtch(i)) >= 2,1);
+              end
+            end
+          end
+          
+          x=recomp(vars,exp,eye(size(exp,1)));
+        end
+        
+        function x = trigExprReduction(x,s,c)
+          error('')
+          for i=1:length(s),
+            
+            [~,cid] = isfree(c.indexinto(i));
+            [~,sid] = isfree(s.indexinto(i));
+            [ii,jj] = find(x.var == cid);
+            %           cind = find(x.var == cid);
+            pow = x.pow;
+            vars = x.var;
+            sub = x.sub;
+            coeff = x.coeff;
+            cind_array = ii+(jj-1)*size(pow,1);
+            ind = find(pow(ii+(jj-1)*size(pow,1)) >= 2);
+            N = length(ind);
+            
+            pow(cind_array(ind)) = pow(cind_array(ind)) - 2;
+            pow = [pow zeros(size(pow,1),1); pow(ii(ind),:) 2*ones(N,1)];
+            vars = [vars zeros(size(vars,1),1); vars(ii(ind),:) sid*ones(N,1)];
+            sub = [sub;ones(N,2)];
+            coeff = [coeff;-coeff(ii(ind))];
+            x = msspoly([1 1],sub,vars,pow,coeff);
+          end
+        end
     end
     
     methods (Static)

@@ -17,9 +17,13 @@ function ik=match(x,y)
 if ~f, error('First argument must be free msspoly.'); end
 if nargin < 2, error('Two arguments required.'); end
 
-[f,yn] = msspoly.isfreemsspoly(y);
-if ~f, error('Second argument must be free msspoly.'); end
-
-ik=msspoly.match_list(xn,yn);
-
+if isempty(y)
+  ik = 0;
+else
+  
+  [f,yn] = msspoly.isfreemsspoly(y);
+  if ~f, error('Second argument must be free msspoly.'); end
+  
+  ik=msspoly.match_list(xn,yn);
+end
 end

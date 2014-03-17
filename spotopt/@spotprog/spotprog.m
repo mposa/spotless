@@ -723,6 +723,7 @@ classdef spotprog
                 [P,A,b,c,K,d] = dl.toSedumi(-dobj);
                 
                 [x,y,z,info] = solver(A,b,c,K,options);
+                
                 nf = dl.numFree;
                 xsol = P*x;
                 zsol = P(nf+1:end,nf+1:end)*z(nf+1:end);
@@ -730,12 +731,241 @@ classdef spotprog
             else
                 pr = prog.primalize();
                 nf = pr.numFree;
+
                 [P,A,b,c,K,d] = pr.toSedumi(pobj);
+
+                do_elim = 1;
+                for i=1:5,
+                  I = sum(A~=0,2) == 1 & b==0;
+                  I0 = find(I);
+                  A_sub = A(setdiff(1:size(A,1),I0),:);
+                  b_sub = b(setdiff(1:size(A,1),I0));
+                  [ra,ca] = find(A(I0,:));
+                  cu = unique(ca);
+                  Az = sparse(1:length(cu),cu,ones(length(cu),1),length(cu),size(A,2));
+                  bz = zeros(length(cu),1);
+                  
+                  A_sub(:,cu) = 0;
+                  if(length(cu)==length(ca))
+                    do_elim = 0;
+                  else
+                    A = [A_sub;Az];
+                    b = [b_sub;bz];
+                  end
+                  Ielim = find(sum(A~=0,2) == 0 & b==0);
+                  b = b(setdiff(1:size(A,1),Ielim));
+                  A = A(setdiff(1:size(A,1),Ielim),:);
+                end
 
                 % Enable basic facial reduction.
                 % save Abck_1sdsos_30.mat A b c K options P pr pobj 
-                [x,y,z,info] = solver(A,b,c,K,options);
+                
+                if isfield(options,'do_fr') && options.do_fr
+                  prg = frlibPrg(A,b,c,K);
+                  prgR = prg.ReducePrimal('d');
+                  %                 prgR = prg.ReducePrimal('dd');
+                  display(sprintf('Facial reduction reduced problem from %d to %d variables',size(prg.A,2),size(prgR.A,2)));
+                  [A,b,c,K] = prgR.GetMosek();
+                  [x,y,z,info] = solver(A,b,c,K,options);
+                  z = [];
+                  if ~isempty(prgR.T)
+                    x  = prgR.RecoverPrimal(x);
+                  end
+                else
+                  [x,y,z,info] = solver(A,b,c,K,options);
+                end
+                
+%                 if isfield(options,'backoff') && options.backoff,
+%                   costval = x'*c;
+%                   
+%                   nl = prog.posOffset;
+%                   prog.K1.l = prog.K1.l + 1;
+%                   [prog,v] = prog.insertConeVariables(nl,1);
+%                   
+%                   nl = nl + K.f;
+%                   A_b = [A;c'];
+%                   A_b = [A_b(:,1:nl) zeros(size(A_b,1),1) A_b(:,nl+1:end)];
+%                   A_b(end,nl+1) = 1;
+%                   b_b = [b;costval + .01*abs(costval)];
+%                   K_b = K;
+%                   K_b.l = K_b.l + 1;
+%                   P_b = sparse([],[],[],size(A_b,2),size(A_b,2));
+%                   P_b([1:nl nl+2:end],[1:nl nl+2:end]) = P;
+%                   P_b(nl+1,nl+1) = 1;
+%                   P = P_b;
+%                   display(sprintf('Backing off and re-solving'));
+%                   [x,y,z,info] = solver(A_b,b_b,sparse([],[],[],size(A_b,2),1),K_b,options);
+%                 end
+                
+                if isfield(options,'clean_primal') && options.clean_primal,
+                 %todo:check info here 
+                  I0 = [];
+                  Isym = [];
+                  for i=1:length(K.s),
+                    I0_i = [];
+                    Isym_i = [];
+                    for j=1:K.s(i),
+                      I0_i = [I0_i, j*(K.s(i)+1) - K.s(i) + 1:j*K.s(i)];
+                      Isym_i = [Isym_i, j*(1+K.s(i)):K.s(i):K.s(i)^2];
+                    end
+                    I0_i = I0_i + K.f + K.l + sum(K.s(1:i-1).^2);
+                    Isym_i = Isym_i + K.f + K.l + sum(K.s(1:i-1).^2);
+                    I0 = [I0 I0_i];
+                    Isym = [Isym Isym_i];
+                  end
+                  
+%                   assert(max(max(abs(A(:,I0)))) == 0);
+                  Atmp = A;
+                  Atmp(:,Isym) = Atmp(:,Isym) + Atmp(:,I0);
+                  A2 = Atmp(:,setdiff(1:length(x),I0));
+                  
+                  [Amval, Im] = max(abs(A2)');
+                  scaleval = sign(diag(A2(:,Im))).*Amval';
+                  scale=sparse(1:size(A2,1),1:size(A2,1),1./scaleval);
+                  As = scale*A2;
+                  bs = scale*b;
+                  
+                  T = speye(length(x));
+                  T = T(setdiff(1:length(x),I0),:);
+                  TI = speye(length(x));
+                  TI(Isym,I0) = speye(length(I0));
+                  TI = TI(setdiff(1:length(x),I0),:);
+                  tic;
+                  k = 1;
+                  Ac = As;
+                  bc = bs;
+                  lastwarn('');
+                  max_dk = 8;
+                  dk = max_dk;
+                  warning off
+                  display('Starting row reduction of A');
+                  Ac\bc;
+                  init_size = size(Ac,1);
+                  rr_iter = 0;
+                  if ~isempty(lastwarn)
+                    while(k <= size(Ac,1))
+                      Ac(1:k+dk-1,:)\bc(1:k+dk-1);
+                      if ~isempty(lastwarn)
+                        lastwarn('');
+                        if dk == 1
+                          Ac = Ac([(1:k-1) (k+1:end)],:);
+                          bc = bc([(1:k-1) (k+1:end)]);
+                          dk = min(max_dk,size(Ac,1)-k+1);
+                        else
+                          dk = floor(dk/2);
+                        end
+                      else
+                        k = k+dk;
+                        dk = min(max_dk,size(Ac,1)-k+1);
+                      end
+                      rr_iter = rr_iter + 1;
+                      if rem(rr_iter,100) == 0
+                        display(sprintf('rr_iter=%d, k=%d of %d rows. Original size %d rows.',rr_iter,k,size(Ac,1),init_size));
+                        Ac\bc;
+                        if isempty(lastwarn)
+                          break;
+                        else
+                          lastwarn('');
+                        end
+                      end
+                    end
+                  end
+                  warning on
+                  display(sprintf('Row reduction of A in %f seconds. Eliminated %d of %d rows.',toc,-size(Ac,1)+init_size,init_size));
 
+                  Winv = speye(length(x));
+                  Winv(Isym,Isym) = sqrt(2)/2*Winv(Isym,Isym);
+                  Winv = Winv(setdiff(1:length(x),I0),setdiff(1:length(x),I0));
+                  
+                  W = speye(length(x));
+                  W(Isym,Isym) = sqrt(2)*W(Isym,Isym);
+                  W = W(setdiff(1:length(x),I0),setdiff(1:length(x),I0));
+
+                  Aopt = [2*(W*W') Ac'; Ac sparse([],[],[],size(Ac,1),size(Ac,1))];
+                  
+                  last_resid = norm(A*x-b);
+                  resid = last_resid;
+                  iter=0;
+                  max_iter = 100;
+                  display(sprintf('Iter %d, resid=%e, time=%f',iter,resid,0));
+                  tic
+                  if 0
+                  while iter == 0 || (iter < max_iter && resid/last_resid < .9999)
+                    last_resid = resid;
+                    bopt = [zeros(size(Ac,2),1); bc - Ac*T*x];
+                    dx = Aopt\bopt;
+                    dx = dx(1:size(Ac,2));
+                    x = x + TI'*dx;
+                    
+                    for i=1:length(K.s),
+                      I=K.f + K.l + +sum(K.q) + sum(K.s(1:i-1).^2) +( 1:K.s(i)^2);
+                      Q{i} = reshape(x(I),K.s(i),[]);
+                      [V,D] = eig(Q{i});
+                      x(I) = reshape(Q{i} - V*min(D,0)*V',[],1);
+                    end
+                    resid = norm(A*x-b);
+                    iter = iter+1;
+                    if rem(iter,10) == 0,
+                      display(sprintf('Iter %d, resid=%e, time=%f',iter,resid,toc));
+                    end
+                  end
+                  else
+                    x0 = x;
+                    xbar = x0;
+                    xtild = x0;
+                    
+                    while iter <= 1 || (iter < max_iter && resid/last_resid < .9999)
+                      xk = 2/(iter+2)*xbar + iter/(iter+2)*xtild;
+                      last_resid = resid;
+                      bopt = [zeros(size(Ac,2),1); bc - Ac*T*xk];
+                      dx = Aopt\bopt;
+                      dx = dx(1:size(Ac,2));
+                      xproj = xk + TI'*dx;
+                      
+                      xproj(K.f+(1:K.l)) = max(0, xproj(K.f+(1:K.l)));
+                      %todo:deal with positivity constraints better, this
+                      %(or the socp) isn't quite working, since residual
+                      %goes up eventually
+                      xbar = xbar - (iter+2)/2*(xk - xproj);
+                      
+                      if ~isempty(K.q)
+                        if max(K.q) ~= 3 || min(K.q) ~= 3
+                          error('Only 3rd order second order cone constraints are dealt with here, just need to code the general case')
+                        end
+                        I = K.f + K.l + reshape(1:sum(K.q),3,[]);
+                        I_viol = I(:,xbar(I(1,:)).^2 - xbar(I(2,:)).^2 - xbar(I(3,:)).^2 < 0);
+                        
+                        tmp = sqrt(xbar(I_viol(2,:)).^2 + xbar(I_viol(3,:)).^2);
+                        xbar(I_viol(1,:)) = (xbar(I_viol(1,:)) + tmp)/2;
+                        xbar(I_viol(2,:)) = xbar(I_viol(2,:)).*(xbar(I_viol(1,:))./tmp);
+                        xbar(I_viol(3,:)) = xbar(I_viol(3,:)).*(xbar(I_viol(1,:))./tmp);
+                        
+                        I_neg = I(:,xbar(I(1,:)) < 0);
+                        xbar(I_neg) = 0;
+                      end
+                      
+                      for i=1:length(K.s),
+                        I=K.f + K.l + sum(K.q) + sum(K.s(1:i-1).^2) +( 1:K.s(i)^2);
+                        Q{i} = reshape(xbar(I),K.s(i),[]);
+                        [V,D] = eig(Q{i});
+                        xbar(I) = reshape(Q{i} - V*min(D,0)*V',[],1);
+                      end
+                      xtild = 2/(iter+2)*xbar + iter/(iter+2)*xtild;
+                      resid = norm(A*xk-b);
+                      iter = iter+1;
+                      if rem(iter,10) == 0,
+                        display(sprintf('Iter %d, resid=%e, time=%f',iter,resid,toc));
+                      end
+                    end
+                    if resid > last_resid
+                      display('Residual increased during a projection step due to a bug or numerical issues. Terminated early.')
+                    end
+                    x = xk;
+                  end
+                  resid = norm(A*x-b);
+                  display(sprintf('Iter %d, resid=%e, time=%f',iter,resid,toc));
+%                   keyboard
+                end
                 if ~isempty(x)
                    xsol = P*x;
                 else
