@@ -56,8 +56,8 @@ if length(perm) ~= length(xd)
   error('p must only be a function of x');
 end
 
-[~,I] = sort(perm);
-pd = pd(:,I);
+% [~,I] = sort(perm);
+% pd = pd(:,I);
 
 str = '@(coef,x) [';
 for k=1:size(Md,1),
@@ -76,7 +76,7 @@ for k=1:size(Md,1),
 end
 str = [str ']'];
 fn = str2func(str);
-q = fn(Md,v);
+q = fn(Md,v(perm,:));
 end
 
 
